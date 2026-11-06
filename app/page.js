@@ -102,7 +102,7 @@ export default function Home() {
         <>
           <div className="row">
             <span className="muted">Wallet</span>
-            <span>{account.slice(0, 6)}…{account.slice(-4)}</span>
+            <span>{account.slice(0, 6)}...{account.slice(-4)}</span>
           </div>
           <div className="row">
             <span className="muted">Your deposit</span>
