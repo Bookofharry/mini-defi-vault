@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BrowserProvider, Contract, JsonRpcProvider, formatEther, parseEther } from "ethers";
 import { VAULT_ABI, READ_RPC } from "./abi";
 import deployment from "./contract.json";
-import { getEthereum, waitForEthereum } from "./wallet";
+import { getEthereum, waitForEthereum, requestAccountsFromAnyProvider } from "./wallet";
 
 const CHAIN_HEX = "0xaa36a7";
 
@@ -176,20 +176,7 @@ export function useVault() {
         throw err;
       }
       setHasWallet(true);
-      let accs;
-      try {
-        accs = await eth.request({ method: "eth_requestAccounts" });
-      } catch (reqErr) {
-        // Fallback if an extension wrapper (like evmAsk.js) fails on window.ethereum
-        if (window.ethereum?.providers?.length) {
-          const mm = window.ethereum.providers.find((p) => p.isMetaMask) || window.ethereum.providers[0];
-          accs = await mm.request({ method: "eth_requestAccounts" });
-        } else {
-          throw reqErr;
-        }
-      }
-      const addr = accs?.[0];
-      if (!addr) throw new Error("No account returned by wallet.");
+      const { account: addr } = await requestAccountsFromAnyProvider();
       localStorage.setItem("mv-connected", "1");
       localStorage.removeItem("mv-disconnected");
       setAccount(addr);
@@ -276,6 +263,10 @@ export function useVault() {
 export function errorMessage(e) {
   if (e?.code === "ACTION_REJECTED" || e?.code === 4001) return "You rejected the request in your wallet.";
   if (e?.code === "INSUFFICIENT_FUNDS") return "Not enough Sepolia ETH to cover the amount and gas.";
-  return e?.reason || e?.shortMessage || e?.message || "Something went wrong.";
+  const msg = e?.reason || e?.shortMessage || e?.message || "";
+  if (msg.toLowerCase().includes("unexpected error")) {
+    return "Your browser wallet extension is locked or conflicting with another wallet extension. Please unlock MetaMask and try again.";
+  }
+  return msg || "Something went wrong.";
 }
 
