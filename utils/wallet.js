@@ -46,7 +46,7 @@ export function getCandidateProviders() {
     }
   };
 
-  // 1. Prefer EIP-6963 announced io.metamask
+  // 1. Prefer EIP-6963 announced wallets (modern standard, works cleanly for MetaMask, Rabby, Coinbase, Phantom, etc.)
   for (const item of announcedProviders) {
     if (item.info?.rdns === "io.metamask" || item.info?.name?.toLowerCase() === "metamask") {
       add(item.provider, item.info.name || "MetaMask");
@@ -61,13 +61,17 @@ export function getCandidateProviders() {
   // 3. window.ethereum.providers array (if present)
   const eth = window.ethereum;
   if (Array.isArray(eth?.providers)) {
-    const realMM = eth.providers.find((p) => p.isMetaMask && !p.isBraveWallet && !p.isRabby && !p.isTrust);
-    if (realMM) add(realMM, "MetaMask");
-    for (const p of eth.providers) add(p, p.isMetaMask ? "MetaMask" : "Injected Wallet");
+    for (const p of eth.providers) {
+      const label = p.isRabby ? "Rabby Wallet" : p.isBraveWallet ? "Brave Wallet" : p.isCoinbaseWallet ? "Coinbase Wallet" : p.isTrust ? "Trust Wallet" : p.isMetaMask ? "MetaMask" : "Browser Wallet";
+      add(p, label);
+    }
   }
 
-  // 4. Direct window.ethereum last (since evmAsk.js often hijacks this top-level object)
-  if (eth) add(eth, eth.isMetaMask ? "MetaMask" : "Browser Extension");
+  // 4. Direct window.ethereum last
+  if (eth) {
+    const label = eth.isRabby ? "Rabby Wallet" : eth.isBraveWallet ? "Brave Wallet" : eth.isCoinbaseWallet ? "Coinbase Wallet" : eth.isTrust ? "Trust Wallet" : eth.isMetaMask ? "MetaMask" : "Browser Extension";
+    add(eth, label);
+  }
 
   return list;
 }

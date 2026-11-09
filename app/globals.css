@@ -764,3 +764,12 @@ button.tx-row:hover { background: var(--surface-2); }
   border-radius: 4px;
   background: var(--surface-2);
 }
+
+.install-box {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.conflict-box .btn-row {
+  margin-top: 4px;
+}

@@ -95,16 +95,20 @@ export default function App() {
     setTimeout(() => setToasts((ts) => ts.filter((x) => x.id !== id)), t.type === "error" ? 7000 : 5000);
   }, []);
 
-  const [walletSheet, setWalletSheet] = useState(false);
+  const [walletSheet, setWalletSheet] = useState(null); // null | "no_wallet" | "conflict"
 
   const connect = async (preferredProvider = null) => {
     try {
       await v.connect(preferredProvider && preferredProvider.request ? preferredProvider : null);
-      setWalletSheet(false);
+      setWalletSheet(null);
       toast({ type: "success", title: "Wallet connected" });
     } catch (e) {
-      if (e?.code === "NO_WALLET" || e?.code === "WALLET_CONFLICT") {
-        setWalletSheet(true);
+      if (e?.code === "NO_WALLET") {
+        setWalletSheet("no_wallet");
+        return;
+      }
+      if (e?.code === "WALLET_CONFLICT") {
+        setWalletSheet("conflict");
         return;
       }
       toast({ type: "error", title: "Connection failed", text: errorMessage(e) });
@@ -236,7 +240,7 @@ export default function App() {
         </nav>
       </div>
 
-      <WalletSheet open={walletSheet} onClose={() => setWalletSheet(false)} onSelectProvider={connect} toast={toast} />
+      <WalletSheet mode={walletSheet} onClose={() => setWalletSheet(null)} onSelectProvider={connect} toast={toast} />
       <Toasts items={toasts} onDismiss={(id) => setToasts((t) => t.filter((x) => x.id !== id))} />
     </div>
   );
@@ -717,7 +721,15 @@ function ContractView({ v }) {
 
 /* ---------------- Wallet picker (no injected wallet or conflict) ---------------- */
 
-function WalletSheet({ open, onClose, onSelectProvider, toast }) {
+const DESKTOP_WALLETS = [
+  { id: "metamask", name: "MetaMask", desc: "Most popular Ethereum browser extension", url: "https://metamask.io/download/" },
+  { id: "rabby", name: "Rabby Wallet", desc: "Security-first multi-chain Ethereum wallet", url: "https://rabby.io/" },
+  { id: "coinbase", name: "Coinbase Wallet", desc: "Self-custody Ethereum wallet by Coinbase", url: "https://www.coinbase.com/wallet/downloads" },
+  { id: "trust", name: "Trust Wallet", desc: "Multi-chain browser extension and mobile app", url: "https://trustwallet.com/browser-extension" },
+];
+
+function WalletSheet({ mode, onClose, onSelectProvider, toast }) {
+  const open = !!mode;
   const [mobile, setMobile] = useState(false);
   const [links, setLinks] = useState([]);
   const [announced, setAnnounced] = useState([]);
@@ -743,7 +755,7 @@ function WalletSheet({ open, onClose, onSelectProvider, toast }) {
       {mobile ? (
         <div className="wallet-sheet">
           <p className="muted">
-            Mobile browsers cannot connect to a wallet directly. Open MiniVault inside your wallet app's built-in browser to connect.
+            Mobile browsers cannot connect to a wallet directly. Open MiniVault inside any Ethereum wallet app to connect:
           </p>
           <ul className="wallet-list">
             {links.map((w) => (
@@ -761,14 +773,14 @@ function WalletSheet({ open, onClose, onSelectProvider, toast }) {
           </ul>
           <Button variant="secondary" icon="copy" className="w-full" onClick={copyLink}>Copy link for another wallet</Button>
           <p className="hint center">
-            No wallet yet? <a href="https://metamask.io/download/" target="_blank" rel="noreferrer">Get MetaMask</a>, create a wallet, then come back.
+            Don't have a wallet yet? Install <a href="https://metamask.io/download/" target="_blank" rel="noreferrer">MetaMask</a>, <a href="https://trustwallet.com/" target="_blank" rel="noreferrer">Trust Wallet</a>, or <a href="https://www.coinbase.com/wallet" target="_blank" rel="noreferrer">Coinbase Wallet</a>.
           </p>
         </div>
       ) : (
         <div className="wallet-sheet">
           {announced.length > 0 && (
             <>
-              <p className="muted">Select the wallet extension you want to connect with:</p>
+              <p className="muted">Detected wallet extensions in your browser:</p>
               <ul className="wallet-list">
                 {announced.map((item, idx) => (
                   <li key={item.info?.uuid || idx}>
@@ -787,35 +799,53 @@ function WalletSheet({ open, onClose, onSelectProvider, toast }) {
               </ul>
             </>
           )}
-          <div className="conflict-box">
-            <p className="conflict-title"><Icon name="alert" size={16} /> Why did connection fail?</p>
-            <ol className="steps">
-              <li>
-                <span className="step-n">1</span>
-                <div>
-                  <b>Unlock MetaMask first</b>
-                  <p>Click the MetaMask fox icon in your browser's top-right toolbar and enter your password so it is unlocked.</p>
-                </div>
-              </li>
-              <li>
-                <span className="step-n">2</span>
-                <div>
-                  <b>Disable conflicting wallet extensions</b>
-                  <p>Another wallet extension (producing <code>evmAsk.js</code>, such as Phantom, OKX, or Coinbase Wallet) is intercepting MetaMask. Open <code>chrome://extensions</code> and toggle off the other wallet extension.</p>
-                </div>
-              </li>
-              <li>
-                <span className="step-n">3</span>
-                <div>
-                  <b>Try connecting again</b>
-                  <p>Once MetaMask is unlocked, click Retry below.</p>
-                </div>
-              </li>
-            </ol>
-          </div>
-          <div className="btn-row">
-            <Button variant="primary" icon="wallet" onClick={() => onSelectProvider(null)}>Retry connection</Button>
-            <Button variant="secondary" icon="refresh" onClick={() => window.location.reload()}>Reload page</Button>
+
+          {mode === "conflict" && (
+            <div className="conflict-box">
+              <p className="conflict-title"><Icon name="alert" size={16} /> Wallet extension is locked or not set up</p>
+              <ol className="steps">
+                <li>
+                  <span className="step-n">1</span>
+                  <div>
+                    <b>Unlock or finish setting up your wallet</b>
+                    <p>Click your wallet icon in the browser's top-right toolbar and unlock it (or create an Ethereum account if it's a new install).</p>
+                  </div>
+                </li>
+                <li>
+                  <span className="step-n">2</span>
+                  <div>
+                    <b>Using multiple wallet extensions?</b>
+                    <p>If an unused extension (e.g. <code>evmAsk.js</code>) is intercepting requests, toggle it off in <code>chrome://extensions</code> so your main wallet responds.</p>
+                  </div>
+                </li>
+              </ol>
+              <div className="btn-row">
+                <Button variant="primary" size="sm" icon="wallet" onClick={() => onSelectProvider(null)}>Retry connection</Button>
+                <Button variant="secondary" size="sm" icon="refresh" onClick={() => window.location.reload()}>Reload page</Button>
+              </div>
+            </div>
+          )}
+
+          <div className="install-box">
+            <p className="muted">
+              {mode === "conflict"
+                ? "Or install a supported Ethereum wallet extension:"
+                : "No Ethereum wallet extension was detected. Install any Ethereum-compatible wallet to use MiniVault:"}
+            </p>
+            <ul className="wallet-list">
+              {DESKTOP_WALLETS.map((w) => (
+                <li key={w.id}>
+                  <a className="wallet-option" href={w.url} target="_blank" rel="noreferrer">
+                    <span className="wallet-option-icon"><Icon name="wallet" size={18} /></span>
+                    <span className="wallet-option-text">
+                      <b>{w.name}</b>
+                      <small>{w.desc}</small>
+                    </span>
+                    <Icon name="external" size={16} />
+                  </a>
+                </li>
+              ))}
+            </ul>
           </div>
         </div>
       )}
