@@ -23,6 +23,15 @@ if (typeof window !== "undefined") {
   } catch {}
 }
 
+export function getAnnouncedWallets() {
+  if (typeof window !== "undefined") {
+    try {
+      window.dispatchEvent(new Event("eip6963:requestProvider"));
+    } catch {}
+  }
+  return [...announcedProviders];
+}
+
 // Returns an ordered list of candidate wallet providers, putting genuine MetaMask first
 export function getCandidateProviders() {
   if (typeof window === "undefined") return [];
@@ -31,34 +40,34 @@ export function getCandidateProviders() {
   } catch {}
 
   const list = [];
-  const add = (p) => {
-    if (p && typeof p.request === "function" && !list.includes(p)) {
-      list.push(p);
+  const add = (p, name = "Wallet") => {
+    if (p && typeof p.request === "function" && !list.some((x) => x.provider === p)) {
+      list.push({ provider: p, name });
     }
   };
 
   // 1. Prefer EIP-6963 announced io.metamask
   for (const item of announcedProviders) {
     if (item.info?.rdns === "io.metamask" || item.info?.name?.toLowerCase() === "metamask") {
-      add(item.provider);
+      add(item.provider, item.info.name || "MetaMask");
     }
   }
 
   // 2. Other EIP-6963 announced wallets
   for (const item of announcedProviders) {
-    add(item.provider);
+    add(item.provider, item.info?.name || "Browser Wallet");
   }
 
   // 3. window.ethereum.providers array (if present)
   const eth = window.ethereum;
   if (Array.isArray(eth?.providers)) {
     const realMM = eth.providers.find((p) => p.isMetaMask && !p.isBraveWallet && !p.isRabby && !p.isTrust);
-    if (realMM) add(realMM);
-    for (const p of eth.providers) add(p);
+    if (realMM) add(realMM, "MetaMask");
+    for (const p of eth.providers) add(p, p.isMetaMask ? "MetaMask" : "Injected Wallet");
   }
 
   // 4. Direct window.ethereum last (since evmAsk.js often hijacks this top-level object)
-  if (eth) add(eth);
+  if (eth) add(eth, eth.isMetaMask ? "MetaMask" : "Browser Extension");
 
   return list;
 }
@@ -66,19 +75,21 @@ export function getCandidateProviders() {
 export function getEthereum() {
   if (activeProvider) return activeProvider;
   const candidates = getCandidateProviders();
-  return candidates[0] || null;
+  return candidates[0]?.provider || null;
 }
 
 export function setActiveProvider(p) {
   activeProvider = p;
 }
 
-// Tries every available candidate provider until one connects without throwing "Unexpected error"
-export async function requestAccountsFromAnyProvider() {
-  const candidates = getCandidateProviders();
+// Connects to a specific provider or tries every candidate provider
+export async function requestAccountsFromAnyProvider(preferredProvider = null) {
+  const candidates = preferredProvider
+    ? [{ provider: preferredProvider, name: "Selected Wallet" }]
+    : getCandidateProviders();
   let lastError = null;
 
-  for (const provider of candidates) {
+  for (const { provider } of candidates) {
     try {
       const accs = await provider.request({ method: "eth_requestAccounts" });
       if (accs && accs.length > 0) {
@@ -93,13 +104,18 @@ export async function requestAccountsFromAnyProvider() {
       }
       // If request is already pending in the wallet popup, let the user know
       if (err?.code === -32002) {
-        throw new Error("A connection request is already open in your wallet. Click your wallet extension icon to approve it.");
+        throw new Error("A connection request is already open in your wallet. Click your MetaMask icon in the top-right browser toolbar to approve it.");
       }
       // Otherwise (e.g., evmAsk.js "Unexpected error"), continue to the next candidate provider
     }
   }
 
-  throw lastError || new Error("Could not connect to wallet.");
+  const finalErr = lastError || new Error("Could not connect to wallet.");
+  const msg = (finalErr?.message || "").toLowerCase();
+  if (msg.includes("unexpected error") || !candidates.length) {
+    finalErr.code = "WALLET_CONFLICT";
+  }
+  throw finalErr;
 }
 
 // Waits briefly for wallets that inject after page load.

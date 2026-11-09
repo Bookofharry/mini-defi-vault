@@ -6,7 +6,7 @@ import {
   Badge, Button, Card, CopyButton, EmptyState, IconButton, Menu, MenuItem, Sheet, Skeleton, Tabs, Toasts,
 } from "@/components/ui";
 import { useVault, errorMessage } from "@/utils/useVault";
-import { isMobileDevice, walletDeepLinks } from "@/utils/wallet";
+import { isMobileDevice, walletDeepLinks, getAnnouncedWallets } from "@/utils/wallet";
 import { EXPLORER } from "@/utils/abi";
 
 const NAV = [
@@ -97,13 +97,16 @@ export default function App() {
 
   const [walletSheet, setWalletSheet] = useState(false);
 
-  const connect = async () => {
+  const connect = async (preferredProvider = null) => {
     try {
-      await v.connect();
+      await v.connect(preferredProvider && preferredProvider.request ? preferredProvider : null);
       setWalletSheet(false);
       toast({ type: "success", title: "Wallet connected" });
     } catch (e) {
-      if (e?.code === "NO_WALLET") return setWalletSheet(true);
+      if (e?.code === "NO_WALLET" || e?.code === "WALLET_CONFLICT") {
+        setWalletSheet(true);
+        return;
+      }
       toast({ type: "error", title: "Connection failed", text: errorMessage(e) });
     }
   };
@@ -233,7 +236,7 @@ export default function App() {
         </nav>
       </div>
 
-      <WalletSheet open={walletSheet} onClose={() => setWalletSheet(false)} toast={toast} />
+      <WalletSheet open={walletSheet} onClose={() => setWalletSheet(false)} onSelectProvider={connect} toast={toast} />
       <Toasts items={toasts} onDismiss={(id) => setToasts((t) => t.filter((x) => x.id !== id))} />
     </div>
   );
@@ -712,16 +715,18 @@ function ContractView({ v }) {
   );
 }
 
-/* ---------------- Wallet picker (no injected wallet) ---------------- */
+/* ---------------- Wallet picker (no injected wallet or conflict) ---------------- */
 
-function WalletSheet({ open, onClose, toast }) {
+function WalletSheet({ open, onClose, onSelectProvider, toast }) {
   const [mobile, setMobile] = useState(false);
   const [links, setLinks] = useState([]);
+  const [announced, setAnnounced] = useState([]);
 
   useEffect(() => {
     if (!open) return;
     setMobile(isMobileDevice());
     setLinks(walletDeepLinks());
+    setAnnounced(getAnnouncedWallets());
   }, [open]);
 
   const copyLink = async () => {
@@ -734,11 +739,11 @@ function WalletSheet({ open, onClose, toast }) {
   };
 
   return (
-    <Sheet open={open} onClose={onClose} title={mobile ? "Open in a wallet app" : "Wallet required"}>
+    <Sheet open={open} onClose={onClose} title={mobile ? "Open in a wallet app" : "Connect your wallet"}>
       {mobile ? (
         <div className="wallet-sheet">
           <p className="muted">
-            Mobile browsers can't connect to a wallet directly. Open MiniVault inside your wallet app's built-in browser to connect.
+            Mobile browsers cannot connect to a wallet directly. Open MiniVault inside your wallet app's built-in browser to connect.
           </p>
           <ul className="wallet-list">
             {links.map((w) => (
@@ -761,18 +766,55 @@ function WalletSheet({ open, onClose, toast }) {
         </div>
       ) : (
         <div className="wallet-sheet">
-          <p className="muted">
-            MiniVault needs a browser wallet such as MetaMask to sign transactions on Sepolia.
-          </p>
-          <ol className="steps">
-            <li><span className="step-n">1</span><div><b>Install MetaMask</b><p>Add the extension to Chrome, Edge, Brave or Firefox.</p></div></li>
-            <li><span className="step-n">2</span><div><b>Create or import a wallet</b><p>Then enable test networks and select Sepolia.</p></div></li>
-            <li><span className="step-n">3</span><div><b>Reload this page</b><p>Press Connect wallet again.</p></div></li>
-          </ol>
+          {announced.length > 0 && (
+            <>
+              <p className="muted">Select the wallet extension you want to connect with:</p>
+              <ul className="wallet-list">
+                {announced.map((item, idx) => (
+                  <li key={item.info?.uuid || idx}>
+                    <button type="button" className="wallet-option w-full" onClick={() => onSelectProvider(item.provider)}>
+                      <span className="wallet-option-icon">
+                        {item.info?.icon ? <img src={item.info.icon} alt="" width={22} height={22} /> : <Icon name="wallet" size={18} />}
+                      </span>
+                      <span className="wallet-option-text">
+                        <b>{item.info?.name || "Browser Wallet"}</b>
+                        <small>Click to connect</small>
+                      </span>
+                      <Icon name="chevronRight" size={18} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          <div className="conflict-box">
+            <p className="conflict-title"><Icon name="alert" size={16} /> Why did connection fail?</p>
+            <ol className="steps">
+              <li>
+                <span className="step-n">1</span>
+                <div>
+                  <b>Unlock MetaMask first</b>
+                  <p>Click the MetaMask fox icon in your browser's top-right toolbar and enter your password so it is unlocked.</p>
+                </div>
+              </li>
+              <li>
+                <span className="step-n">2</span>
+                <div>
+                  <b>Disable conflicting wallet extensions</b>
+                  <p>Another wallet extension (producing <code>evmAsk.js</code>, such as Phantom, OKX, or Coinbase Wallet) is intercepting MetaMask. Open <code>chrome://extensions</code> and toggle off the other wallet extension.</p>
+                </div>
+              </li>
+              <li>
+                <span className="step-n">3</span>
+                <div>
+                  <b>Try connecting again</b>
+                  <p>Once MetaMask is unlocked, click Retry below.</p>
+                </div>
+              </li>
+            </ol>
+          </div>
           <div className="btn-row">
-            <a className="btn btn-primary btn-md" href="https://metamask.io/download/" target="_blank" rel="noreferrer">
-              <Icon name="external" size={18} /><span>Install MetaMask</span>
-            </a>
+            <Button variant="primary" icon="wallet" onClick={() => onSelectProvider(null)}>Retry connection</Button>
             <Button variant="secondary" icon="refresh" onClick={() => window.location.reload()}>Reload page</Button>
           </div>
         </div>

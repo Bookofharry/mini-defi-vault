@@ -739,3 +739,28 @@ button.tx-row:hover { background: var(--surface-2); }
 .pos-connect { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
 .pos-connect .muted { font-size: 13px; }
 .pos-connect .kv { width: 100%; border-top: 1px solid var(--border-soft); margin-top: 4px; }
+
+.conflict-box {
+  padding: 14px;
+  border-radius: var(--radius);
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.conflict-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  font-size: 13.5px;
+  color: var(--amber);
+}
+.conflict-box code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--surface-2);
+}

@@ -165,18 +165,18 @@ export function useVault() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [account]);
 
-  const connect = useCallback(async () => {
+  const connect = useCallback(async (preferredProvider = null) => {
     setConnecting(true);
     try {
       const eth = await waitForEthereum(800);
-      if (!eth) {
+      if (!eth && !preferredProvider) {
         setHasWallet(false);
         const err = new Error("No Ethereum wallet found in this browser.");
         err.code = "NO_WALLET";
         throw err;
       }
       setHasWallet(true);
-      const { account: addr } = await requestAccountsFromAnyProvider();
+      const { account: addr } = await requestAccountsFromAnyProvider(preferredProvider);
       localStorage.setItem("mv-connected", "1");
       localStorage.removeItem("mv-disconnected");
       setAccount(addr);
