@@ -23,15 +23,15 @@ const TITLES = {
 const GAS_BUFFER = 0.0005;
 
 const fmt = (v, d = 4) => {
-  if (v === null || v === undefined) return "â€”";
+  if (v === null || v === undefined) return "—";
   const n = Number(v);
   if (n === 0) return "0";
   if (n < 0.0001) return "<0.0001";
   return n.toLocaleString("en-US", { maximumFractionDigits: d });
 };
-const short = (a, s = 6, e = 4) => (a ? `${a.slice(0, s)}â€¦${a.slice(-e)}` : "");
+const short = (a, s = 6, e = 4) => (a ? `${a.slice(0, s)}…${a.slice(-e)}` : "");
 const timeAgo = (t) => {
-  if (!t) return "â€”";
+  if (!t) return "—";
   const s = Math.floor((Date.now() - t) / 1000);
   if (s < 60) return "just now";
   if (s < 3600) return `${Math.floor(s / 60)}m ago`;
@@ -276,9 +276,9 @@ function Overview({ v, go, connect }) {
       </Card>
 
       <div className="stat-grid">
-        <Stat label="Wallet balance" icon="wallet" value={account ? fmt(stats.wallet) : "â€”"} unit="ETH" loading={account && stats.wallet === null && !v.statsError} hint={account ? "Available to deposit" : "Not connected"} />
+        <Stat label="Wallet balance" icon="wallet" value={account ? fmt(stats.wallet) : "—"} unit="ETH" loading={account && stats.wallet === null && !v.statsError} hint={account ? "Available to deposit" : "Not connected"} />
         <Stat label="Total value locked" icon="layers" value={fmt(stats.tvl)} unit="ETH" loading={stats.tvl === null && !v.statsError} hint="Across all depositors" />
-        <Stat label="Your share" icon="overview" value={account ? share.toFixed(2) : "â€”"} unit="%" loading={loadingMine} hint="Of total vault deposits">
+        <Stat label="Your share" icon="overview" value={account ? share.toFixed(2) : "—"} unit="%" loading={loadingMine} hint="Of total vault deposits">
           <div className="meter"><div style={{ width: `${Math.min(share, 100)}%` }} /></div>
         </Stat>
       </div>
@@ -348,10 +348,10 @@ function TxRow({ t, onClick, selected }) {
         <span className={`tx-icon ${t.kind}`}><Icon name={t.kind === "deposit" ? "down" : "up"} size={16} /></span>
         <span className="tx-main">
           <span className="tx-title">{t.kind === "deposit" ? "Deposit" : "Withdrawal"}</span>
-          <span className="tx-sub">{timeAgo(t.time)} Â· <span className="mono">{short(t.hash)}</span></span>
+          <span className="tx-sub">{timeAgo(t.time)} · <span className="mono">{short(t.hash)}</span></span>
         </span>
         <span className="tx-end">
-          <span className={`tx-amt ${t.kind}`}>{t.kind === "deposit" ? "+" : "âˆ’"}{fmt(t.amount, 6)} ETH</span>
+          <span className={`tx-amt ${t.kind}`}>{t.kind === "deposit" ? "+" : "−"}{fmt(t.amount, 6)} ETH</span>
           <StatusBadge s={t.status} />
         </span>
       </button>
@@ -437,7 +437,7 @@ function Transfer({ v, mode, setMode, connect, toast }) {
             <div className="field-head">
               <label htmlFor="amount" className="label">Amount</label>
               <span className="field-meta">
-                {mode === "deposit" ? "Wallet" : "Vault"}: {account ? `${fmt(mode === "deposit" ? stats.wallet : stats.vault, 6)} ETH` : "â€”"}
+                {mode === "deposit" ? "Wallet" : "Vault"}: {account ? `${fmt(mode === "deposit" ? stats.wallet : stats.vault, 6)} ETH` : "—"}
               </span>
             </div>
             <div className={`amount-input ${touched && error ? "is-invalid" : ""}`}>
@@ -456,7 +456,7 @@ function Transfer({ v, mode, setMode, connect, toast }) {
                 }}
                 disabled={busy}
               />
-              <span className="token-chip"><span className="eth-dot">Îž</span>ETH</span>
+              <span className="token-chip"><span className="eth-dot">Ξ</span>ETH</span>
             </div>
             <p id="amount-msg" className={`field-msg ${touched && error ? "is-error" : ""}`}>
               {touched && error ? <><Icon name="alert" size={14} /> {error}</> : mode === "deposit" ? "Deposits are credited after one confirmation." : "Withdrawals are sent straight to your connected wallet."}
@@ -471,17 +471,17 @@ function Transfer({ v, mode, setMode, connect, toast }) {
           </div>
 
           <dl className="summary">
-            <div><dt>Current vault balance</dt><dd>{account ? `${fmt(stats.vault, 6)} ETH` : "â€”"}</dd></div>
-            <div><dt>After this {mode}</dt><dd className={after !== null ? "is-strong" : ""}>{after !== null ? `${fmt(Math.max(after, 0), 6)} ETH` : "â€”"}</dd></div>
+            <div><dt>Current vault balance</dt><dd>{account ? `${fmt(stats.vault, 6)} ETH` : "—"}</dd></div>
+            <div><dt>After this {mode}</dt><dd className={after !== null ? "is-strong" : ""}>{after !== null ? `${fmt(Math.max(after, 0), 6)} ETH` : "—"}</dd></div>
             <div><dt>Network</dt><dd>Sepolia</dd></div>
           </dl>
 
           <Button type="submit" size="lg" className="w-full" loading={busy} disabled={account && (!amount || !!error)}>
-            {!account ? "Connect wallet to continue" : busy ? "Confirm in walletâ€¦" : mode === "deposit" ? "Deposit ETH" : "Withdraw ETH"}
+            {!account ? "Connect wallet to continue" : busy ? "Confirm in wallet…" : mode === "deposit" ? "Deposit ETH" : "Withdraw ETH"}
           </Button>
           {busy && lastHash && (
             <a className="pending-link" href={`${EXPLORER}/tx/${lastHash}`} target="_blank" rel="noreferrer">
-              <span className="spinner sm" /> Waiting for confirmation Â· <span className="mono">{short(lastHash)}</span> <Icon name="external" size={14} />
+              <span className="spinner sm" /> Waiting for confirmation · <span className="mono">{short(lastHash)}</span> <Icon name="external" size={14} />
             </a>
           )}
         </form>
@@ -490,8 +490,8 @@ function Transfer({ v, mode, setMode, connect, toast }) {
       <div className="transfer-side">
         <Card title="Position">
           <dl className="kv">
-            <div><dt>In vault</dt><dd>{account ? `${fmt(stats.vault, 6)} ETH` : "â€”"}</dd></div>
-            <div><dt>In wallet</dt><dd>{account ? `${fmt(stats.wallet, 6)} ETH` : "â€”"}</dd></div>
+            <div><dt>In vault</dt><dd>{account ? `${fmt(stats.vault, 6)} ETH` : "—"}</dd></div>
+            <div><dt>In wallet</dt><dd>{account ? `${fmt(stats.wallet, 6)} ETH` : "—"}</dd></div>
             <div><dt>Vault TVL</dt><dd>{fmt(stats.tvl)} ETH</dd></div>
           </dl>
         </Card>
@@ -601,12 +601,12 @@ function TxDetail({ t }) {
         <span className={`tx-icon lg ${t.kind}`}><Icon name={t.kind === "deposit" ? "down" : "up"} size={20} /></span>
         <div>
           <p className="muted">{t.kind === "deposit" ? "Deposited to vault" : "Withdrawn to wallet"}</p>
-          <p className={`detail-amt ${t.kind}`}>{t.kind === "deposit" ? "+" : "âˆ’"}{fmt(t.amount, 8)} ETH</p>
+          <p className={`detail-amt ${t.kind}`}>{t.kind === "deposit" ? "+" : "−"}{fmt(t.amount, 8)} ETH</p>
         </div>
       </div>
       <dl className="kv">
         <div><dt>Status</dt><dd><StatusBadge s={t.status} /></dd></div>
-        <div><dt>Time</dt><dd>{t.time ? new Date(t.time).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" }) : "â€”"}</dd></div>
+        <div><dt>Time</dt><dd>{t.time ? new Date(t.time).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" }) : "—"}</dd></div>
         <div><dt>Block</dt><dd className="mono">{t.block ?? "Pending"}</dd></div>
         <div><dt>Transaction</dt><dd className="mono row-gap">{short(t.hash, 10, 8)} <CopyButton value={t.hash} label="Copy hash" /></dd></div>
       </dl>
@@ -629,7 +629,7 @@ function ContractView({ v }) {
   ];
   return (
     <div className="grid-contract">
-      <Card title="Deployment" subtitle="MiniVault.sol Â· Solidity 0.8.24">
+      <Card title="Deployment" subtitle="MiniVault.sol · Solidity 0.8.24">
         <dl className="kv">
           <div><dt>Address</dt><dd className="mono row-gap">{short(d.address, 10, 8)} <CopyButton value={d.address} label="Copy address" /></dd></div>
           <div><dt>Network</dt><dd>Ethereum Sepolia <Badge tone="green">Live</Badge></dd></div>
