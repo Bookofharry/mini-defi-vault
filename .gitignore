@@ -1,0 +1,14 @@
+# Next.js
+node_modules
+.next
+pnpm-lock.yaml
+.pnpm-store
+
+# Foundry
+cache/
+out/
+/broadcast/*/31337/
+/broadcast/**/dry-run/
+
+# Env
+.env
