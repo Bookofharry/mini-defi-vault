@@ -1,7 +1,7 @@
 import "./globals.css";
 
 export const metadata = {
-  title: "MiniVault — Sepolia DeFi Vault",
+  title: "MiniVault - Sepolia DeFi Vault",
   description: "Deposit and withdraw Sepolia ETH in a non-custodial on-chain vault.",
 };
 

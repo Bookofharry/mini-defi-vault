@@ -6,6 +6,7 @@ import {
   Badge, Button, Card, CopyButton, EmptyState, IconButton, Menu, MenuItem, Sheet, Skeleton, Tabs, Toasts,
 } from "@/components/ui";
 import { useVault, errorMessage } from "@/utils/useVault";
+import { isMobileDevice, walletDeepLinks } from "@/utils/wallet";
 import { EXPLORER } from "@/utils/abi";
 
 const NAV = [
@@ -23,15 +24,15 @@ const TITLES = {
 const GAS_BUFFER = 0.0005;
 
 const fmt = (v, d = 4) => {
-  if (v === null || v === undefined) return "—";
+  if (v === null || v === undefined) return "0";
   const n = Number(v);
   if (n === 0) return "0";
   if (n < 0.0001) return "<0.0001";
   return n.toLocaleString("en-US", { maximumFractionDigits: d });
 };
-const short = (a, s = 6, e = 4) => (a ? `${a.slice(0, s)}…${a.slice(-e)}` : "");
+const short = (a, s = 6, e = 4) => (a ? `${a.slice(0, s)}...${a.slice(-e)}` : "");
 const timeAgo = (t) => {
-  if (!t) return "—";
+  if (!t) return "Recent";
   const s = Math.floor((Date.now() - t) / 1000);
   if (s < 60) return "just now";
   if (s < 3600) return `${Math.floor(s / 60)}m ago`;
@@ -94,11 +95,15 @@ export default function App() {
     setTimeout(() => setToasts((ts) => ts.filter((x) => x.id !== id)), t.type === "error" ? 7000 : 5000);
   }, []);
 
+  const [walletSheet, setWalletSheet] = useState(false);
+
   const connect = async () => {
     try {
       await v.connect();
+      setWalletSheet(false);
       toast({ type: "success", title: "Wallet connected" });
     } catch (e) {
+      if (e?.code === "NO_WALLET") return setWalletSheet(true);
       toast({ type: "error", title: "Connection failed", text: errorMessage(e) });
     }
   };
@@ -228,6 +233,7 @@ export default function App() {
         </nav>
       </div>
 
+      <WalletSheet open={walletSheet} onClose={() => setWalletSheet(false)} toast={toast} />
       <Toasts items={toasts} onDismiss={(id) => setToasts((t) => t.filter((x) => x.id !== id))} />
     </div>
   );
@@ -263,23 +269,33 @@ function Overview({ v, go, connect }) {
             <p className="muted">MiniVault is non-custodial. Only your wallet can withdraw what you deposit.</p>
             <Button icon="wallet" onClick={connect} loading={v.connecting}>Connect wallet</Button>
             {!v.hasWallet && (
-              <p className="hint">
-                No wallet detected.{" "}
-                <a href={typeof window !== "undefined" ? `https://metamask.app.link/dapp/${window.location.host}${window.location.pathname}` : "https://metamask.io/download/"} target="_blank" rel="noreferrer">
-                  Open in MetaMask app
-                </a>{" "}
-                or <a href="https://metamask.io/download/" target="_blank" rel="noreferrer">install MetaMask</a>.
-              </p>
+              <p className="hint">No wallet detected in this browser. Tap Connect wallet to open MiniVault in a wallet app.</p>
             )}
           </div>
         )}
       </Card>
 
       <div className="stat-grid">
-        <Stat label="Wallet balance" icon="wallet" value={account ? fmt(stats.wallet) : "—"} unit="ETH" loading={account && stats.wallet === null && !v.statsError} hint={account ? "Available to deposit" : "Not connected"} />
+        <Stat
+          label="Wallet balance"
+          icon="wallet"
+          value={account ? fmt(stats.wallet) : null}
+          unit="ETH"
+          loading={account && stats.wallet === null && !v.statsError}
+          hint={account ? "Available to deposit" : "Connect to view your balance"}
+          action={!account ? <Button size="sm" variant="secondary" icon="wallet" onClick={connect} loading={v.connecting}>Connect wallet</Button> : null}
+        />
         <Stat label="Total value locked" icon="layers" value={fmt(stats.tvl)} unit="ETH" loading={stats.tvl === null && !v.statsError} hint="Across all depositors" />
-        <Stat label="Your share" icon="overview" value={account ? share.toFixed(2) : "—"} unit="%" loading={loadingMine} hint="Of total vault deposits">
-          <div className="meter"><div style={{ width: `${Math.min(share, 100)}%` }} /></div>
+        <Stat
+          label="Your share"
+          icon="overview"
+          value={account ? share.toFixed(2) : null}
+          unit="%"
+          loading={loadingMine}
+          hint={account ? "Of total vault deposits" : "Connect to see your vault share"}
+          action={!account ? <Button size="sm" variant="secondary" icon="wallet" onClick={connect} loading={v.connecting}>Connect wallet</Button> : null}
+        >
+          {account && <div className="meter"><div style={{ width: `${Math.min(share, 100)}%` }} /></div>}
         </Stat>
       </div>
 
@@ -290,7 +306,12 @@ function Overview({ v, go, connect }) {
         action={account && v.history.length > 0 && <Button size="sm" variant="ghost" onClick={() => go("activity")}>View all</Button>}
       >
         {!account ? (
-          <EmptyState icon="activity" title="No wallet connected" text="Your deposits and withdrawals will appear here." />
+          <EmptyState
+            icon="activity"
+            title="No wallet connected"
+            text="Your deposits and withdrawals will appear here."
+            action={<Button size="sm" icon="wallet" onClick={connect} loading={v.connecting}>Connect wallet</Button>}
+          />
         ) : v.historyLoading && v.history.length === 0 ? (
           <RowSkeletons />
         ) : v.history.length === 0 ? (
@@ -313,14 +334,18 @@ function Overview({ v, go, connect }) {
   );
 }
 
-function Stat({ label, icon, value, unit, hint, loading, children }) {
+function Stat({ label, icon, value, unit, hint, loading, action, children }) {
   return (
     <Card className="stat">
       <div className="stat-top">
         <span className="stat-label">{label}</span>
         <span className="stat-icon"><Icon name={icon} size={16} /></span>
       </div>
-      <div className="stat-value">{loading ? <Skeleton w={110} h={28} r={8} /> : <>{value} <span className="unit">{unit}</span></>}</div>
+      {action ? (
+        <div className="stat-action">{action}</div>
+      ) : (
+        <div className="stat-value">{loading ? <Skeleton w={110} h={28} r={8} /> : <>{value} <span className="unit">{unit}</span></>}</div>
+      )}
       <p className="stat-hint">{hint}</p>
       {children}
     </Card>
@@ -348,10 +373,10 @@ function TxRow({ t, onClick, selected }) {
         <span className={`tx-icon ${t.kind}`}><Icon name={t.kind === "deposit" ? "down" : "up"} size={16} /></span>
         <span className="tx-main">
           <span className="tx-title">{t.kind === "deposit" ? "Deposit" : "Withdrawal"}</span>
-          <span className="tx-sub">{timeAgo(t.time)} · <span className="mono">{short(t.hash)}</span></span>
+          <span className="tx-sub">{timeAgo(t.time)} / <span className="mono">{short(t.hash)}</span></span>
         </span>
         <span className="tx-end">
-          <span className={`tx-amt ${t.kind}`}>{t.kind === "deposit" ? "+" : "−"}{fmt(t.amount, 6)} ETH</span>
+          <span className={`tx-amt ${t.kind}`}>{t.kind === "deposit" ? "+" : "-"}{fmt(t.amount, 6)} ETH</span>
           <StatusBadge s={t.status} />
         </span>
       </button>
@@ -437,7 +462,12 @@ function Transfer({ v, mode, setMode, connect, toast }) {
             <div className="field-head">
               <label htmlFor="amount" className="label">Amount</label>
               <span className="field-meta">
-                {mode === "deposit" ? "Wallet" : "Vault"}: {account ? `${fmt(mode === "deposit" ? stats.wallet : stats.vault, 6)} ETH` : "—"}
+                {mode === "deposit" ? "Wallet" : "Vault"}:{" "}
+                {account ? (
+                  `${fmt(mode === "deposit" ? stats.wallet : stats.vault, 6)} ETH`
+                ) : (
+                  <button type="button" className="inline-connect" onClick={connect}>Connect wallet</button>
+                )}
               </span>
             </div>
             <div className={`amount-input ${touched && error ? "is-invalid" : ""}`}>
@@ -456,7 +486,7 @@ function Transfer({ v, mode, setMode, connect, toast }) {
                 }}
                 disabled={busy}
               />
-              <span className="token-chip"><span className="eth-dot">Ξ</span>ETH</span>
+              <span className="token-chip"><span className="eth-dot"><Icon name="eth" size={12} /></span>ETH</span>
             </div>
             <p id="amount-msg" className={`field-msg ${touched && error ? "is-error" : ""}`}>
               {touched && error ? <><Icon name="alert" size={14} /> {error}</> : mode === "deposit" ? "Deposits are credited after one confirmation." : "Withdrawals are sent straight to your connected wallet."}
@@ -471,17 +501,20 @@ function Transfer({ v, mode, setMode, connect, toast }) {
           </div>
 
           <dl className="summary">
-            <div><dt>Current vault balance</dt><dd>{account ? `${fmt(stats.vault, 6)} ETH` : "—"}</dd></div>
-            <div><dt>After this {mode}</dt><dd className={after !== null ? "is-strong" : ""}>{after !== null ? `${fmt(Math.max(after, 0), 6)} ETH` : "—"}</dd></div>
+            <div>
+              <dt>Current vault balance</dt>
+              <dd>{account ? `${fmt(stats.vault, 6)} ETH` : <button type="button" className="inline-connect" onClick={connect}>Connect wallet</button>}</dd>
+            </div>
+            <div><dt>After this {mode}</dt><dd className={after !== null ? "is-strong" : ""}>{after !== null ? `${fmt(Math.max(after, 0), 6)} ETH` : "0 ETH"}</dd></div>
             <div><dt>Network</dt><dd>Sepolia</dd></div>
           </dl>
 
           <Button type="submit" size="lg" className="w-full" loading={busy} disabled={account && (!amount || !!error)}>
-            {!account ? "Connect wallet to continue" : busy ? "Confirm in wallet…" : mode === "deposit" ? "Deposit ETH" : "Withdraw ETH"}
+            {!account ? "Connect wallet to continue" : busy ? "Confirm in wallet..." : mode === "deposit" ? "Deposit ETH" : "Withdraw ETH"}
           </Button>
           {busy && lastHash && (
             <a className="pending-link" href={`${EXPLORER}/tx/${lastHash}`} target="_blank" rel="noreferrer">
-              <span className="spinner sm" /> Waiting for confirmation · <span className="mono">{short(lastHash)}</span> <Icon name="external" size={14} />
+              <span className="spinner sm" /> Waiting for confirmation - <span className="mono">{short(lastHash)}</span> <Icon name="external" size={14} />
             </a>
           )}
         </form>
@@ -489,11 +522,21 @@ function Transfer({ v, mode, setMode, connect, toast }) {
 
       <div className="transfer-side">
         <Card title="Position">
-          <dl className="kv">
-            <div><dt>In vault</dt><dd>{account ? `${fmt(stats.vault, 6)} ETH` : "—"}</dd></div>
-            <div><dt>In wallet</dt><dd>{account ? `${fmt(stats.wallet, 6)} ETH` : "—"}</dd></div>
-            <div><dt>Vault TVL</dt><dd>{fmt(stats.tvl)} ETH</dd></div>
-          </dl>
+          {account ? (
+            <dl className="kv">
+              <div><dt>In vault</dt><dd>{`${fmt(stats.vault, 6)} ETH`}</dd></div>
+              <div><dt>In wallet</dt><dd>{`${fmt(stats.wallet, 6)} ETH`}</dd></div>
+              <div><dt>Vault TVL</dt><dd>{fmt(stats.tvl)} ETH</dd></div>
+            </dl>
+          ) : (
+            <div className="pos-connect">
+              <p className="muted">Connect your wallet to view your personal vault and wallet balances.</p>
+              <Button size="sm" variant="secondary" icon="wallet" onClick={connect} loading={v.connecting}>Connect wallet</Button>
+              <dl className="kv">
+                <div><dt>Vault TVL</dt><dd>{fmt(stats.tvl)} ETH</dd></div>
+              </dl>
+            </div>
+          )}
         </Card>
         <Card title="Good to know">
           <ul className="notes">
@@ -601,12 +644,12 @@ function TxDetail({ t }) {
         <span className={`tx-icon lg ${t.kind}`}><Icon name={t.kind === "deposit" ? "down" : "up"} size={20} /></span>
         <div>
           <p className="muted">{t.kind === "deposit" ? "Deposited to vault" : "Withdrawn to wallet"}</p>
-          <p className={`detail-amt ${t.kind}`}>{t.kind === "deposit" ? "+" : "−"}{fmt(t.amount, 8)} ETH</p>
+          <p className={`detail-amt ${t.kind}`}>{t.kind === "deposit" ? "+" : "-"}{fmt(t.amount, 8)} ETH</p>
         </div>
       </div>
       <dl className="kv">
         <div><dt>Status</dt><dd><StatusBadge s={t.status} /></dd></div>
-        <div><dt>Time</dt><dd>{t.time ? new Date(t.time).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" }) : "—"}</dd></div>
+        <div><dt>Time</dt><dd>{t.time ? new Date(t.time).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" }) : "Recent"}</dd></div>
         <div><dt>Block</dt><dd className="mono">{t.block ?? "Pending"}</dd></div>
         <div><dt>Transaction</dt><dd className="mono row-gap">{short(t.hash, 10, 8)} <CopyButton value={t.hash} label="Copy hash" /></dd></div>
       </dl>
@@ -629,7 +672,7 @@ function ContractView({ v }) {
   ];
   return (
     <div className="grid-contract">
-      <Card title="Deployment" subtitle="MiniVault.sol · Solidity 0.8.24">
+      <Card title="Deployment" subtitle="MiniVault.sol / Solidity 0.8.24">
         <dl className="kv">
           <div><dt>Address</dt><dd className="mono row-gap">{short(d.address, 10, 8)} <CopyButton value={d.address} label="Copy address" /></dd></div>
           <div><dt>Network</dt><dd>Ethereum Sepolia <Badge tone="green">Live</Badge></dd></div>
@@ -666,5 +709,74 @@ function ContractView({ v }) {
         </ul>
       </Card>
     </div>
+  );
+}
+
+/* ---------------- Wallet picker (no injected wallet) ---------------- */
+
+function WalletSheet({ open, onClose, toast }) {
+  const [mobile, setMobile] = useState(false);
+  const [links, setLinks] = useState([]);
+
+  useEffect(() => {
+    if (!open) return;
+    setMobile(isMobileDevice());
+    setLinks(walletDeepLinks());
+  }, [open]);
+
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      toast({ type: "success", title: "Link copied", text: "Paste it into your wallet app's browser." });
+    } catch {
+      toast({ type: "error", title: "Could not copy", text: window.location.href });
+    }
+  };
+
+  return (
+    <Sheet open={open} onClose={onClose} title={mobile ? "Open in a wallet app" : "Wallet required"}>
+      {mobile ? (
+        <div className="wallet-sheet">
+          <p className="muted">
+            Mobile browsers can't connect to a wallet directly. Open MiniVault inside your wallet app's built-in browser to connect.
+          </p>
+          <ul className="wallet-list">
+            {links.map((w) => (
+              <li key={w.id}>
+                <a className="wallet-option" href={w.url}>
+                  <span className="wallet-option-icon"><Icon name="wallet" size={18} /></span>
+                  <span className="wallet-option-text">
+                    <b>{w.name}</b>
+                    <small>Open MiniVault in {w.name}</small>
+                  </span>
+                  <Icon name="chevronRight" size={18} />
+                </a>
+              </li>
+            ))}
+          </ul>
+          <Button variant="secondary" icon="copy" className="w-full" onClick={copyLink}>Copy link for another wallet</Button>
+          <p className="hint center">
+            No wallet yet? <a href="https://metamask.io/download/" target="_blank" rel="noreferrer">Get MetaMask</a>, create a wallet, then come back.
+          </p>
+        </div>
+      ) : (
+        <div className="wallet-sheet">
+          <p className="muted">
+            MiniVault needs a browser wallet such as MetaMask to sign transactions on Sepolia.
+          </p>
+          <ol className="steps">
+            <li><span className="step-n">1</span><div><b>Install MetaMask</b><p>Add the extension to Chrome, Edge, Brave or Firefox.</p></div></li>
+            <li><span className="step-n">2</span><div><b>Create or import a wallet</b><p>Then enable test networks and select Sepolia.</p></div></li>
+            <li><span className="step-n">3</span><div><b>Reload this page</b><p>Press Connect wallet again.</p></div></li>
+          </ol>
+          <div className="btn-row">
+            <a className="btn btn-primary btn-md" href="https://metamask.io/download/" target="_blank" rel="noreferrer">
+              <Icon name="external" size={18} /><span>Install MetaMask</span>
+            </a>
+            <Button variant="secondary" icon="refresh" onClick={() => window.location.reload()}>Reload page</Button>
+          </div>
+        </div>
+      )}
+    </Sheet>
   );
 }

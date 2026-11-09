@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BrowserProvider, Contract, JsonRpcProvider, formatEther, parseEther } from "ethers";
 import { VAULT_ABI, READ_RPC } from "./abi";
 import deployment from "./contract.json";
+import { getEthereum, waitForEthereum } from "./wallet";
 
 const CHAIN_HEX = "0xaa36a7";
 
@@ -100,31 +101,59 @@ export function useVault() {
   );
 
   const checkChain = useCallback(async () => {
-    if (!window.ethereum) return;
-    const id = await window.ethereum.request({ method: "eth_chainId" });
-    setChainOk(id?.toLowerCase() === CHAIN_HEX);
+    const eth = getEthereum();
+    if (!eth) return;
+    try {
+      const id = await eth.request({ method: "eth_chainId" });
+      setChainOk(String(id).toLowerCase() === CHAIN_HEX || Number(id) === deployment.chainId);
+    } catch {
+      // Ignore silent check errors before wallet is unlocked/authorized
+    }
   }, []);
 
-  // Initial load + silent reconnect.
+  // Initial load + silent reconnect (waits for wallets that inject late).
   useEffect(() => {
     refresh(null);
-    if (typeof window === "undefined" || !window.ethereum) {
-      setHasWallet(false);
-      return;
-    }
-    if (localStorage.getItem("mv-disconnected") !== "1") {
-      window.ethereum.request({ method: "eth_accounts" }).then((accs) => {
-        if (accs?.[0]) setAccount(accs[0]);
-      });
-    }
-    checkChain();
-    const onAccounts = (accs) => setAccount(accs[0] || null);
-    const onChain = () => checkChain();
-    window.ethereum.on?.("accountsChanged", onAccounts);
-    window.ethereum.on?.("chainChanged", onChain);
+    let cleanup = () => {};
+    let cancelled = false;
+    waitForEthereum().then((eth) => {
+      if (cancelled) return;
+      if (!eth) {
+        setHasWallet(false);
+        return;
+      }
+      setHasWallet(true);
+      const onAccounts = (accs) => {
+        const next = accs?.[0] || null;
+        setAccount(next);
+        if (next) checkChain().catch(() => {});
+      };
+      const onChain = () => checkChain().catch(() => {});
+      try {
+        eth.on?.("accountsChanged", onAccounts);
+        eth.on?.("chainChanged", onChain);
+        cleanup = () => {
+          try {
+            eth.removeListener?.("accountsChanged", onAccounts);
+            eth.removeListener?.("chainChanged", onChain);
+          } catch {}
+        };
+      } catch {}
+      // Only check accounts silently if user previously connected in this app
+      if (localStorage.getItem("mv-connected") === "1" && localStorage.getItem("mv-disconnected") !== "1") {
+        eth.request({ method: "eth_accounts" })
+          .then((accs) => {
+            if (accs?.[0]) {
+              setAccount(accs[0]);
+              checkChain().catch(() => {});
+            }
+          })
+          .catch(() => {});
+      }
+    });
     return () => {
-      window.ethereum.removeListener?.("accountsChanged", onAccounts);
-      window.ethereum.removeListener?.("chainChanged", onChain);
+      cancelled = true;
+      cleanup();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -137,13 +166,31 @@ export function useVault() {
   }, [account]);
 
   const connect = useCallback(async () => {
-    if (!window.ethereum) {
-      setHasWallet(false);
-      throw new Error("No Ethereum wallet found. Install MetaMask to continue.");
-    }
     setConnecting(true);
     try {
-      const [addr] = await window.ethereum.request({ method: "eth_requestAccounts" });
+      const eth = await waitForEthereum(800);
+      if (!eth) {
+        setHasWallet(false);
+        const err = new Error("No Ethereum wallet found in this browser.");
+        err.code = "NO_WALLET";
+        throw err;
+      }
+      setHasWallet(true);
+      let accs;
+      try {
+        accs = await eth.request({ method: "eth_requestAccounts" });
+      } catch (reqErr) {
+        // Fallback if an extension wrapper (like evmAsk.js) fails on window.ethereum
+        if (window.ethereum?.providers?.length) {
+          const mm = window.ethereum.providers.find((p) => p.isMetaMask) || window.ethereum.providers[0];
+          accs = await mm.request({ method: "eth_requestAccounts" });
+        } else {
+          throw reqErr;
+        }
+      }
+      const addr = accs?.[0];
+      if (!addr) throw new Error("No account returned by wallet.");
+      localStorage.setItem("mv-connected", "1");
       localStorage.removeItem("mv-disconnected");
       setAccount(addr);
       await checkChain();
@@ -155,16 +202,18 @@ export function useVault() {
 
   const disconnect = useCallback(() => {
     localStorage.setItem("mv-disconnected", "1");
+    localStorage.removeItem("mv-connected");
     setAccount(null);
     setHistory([]);
   }, []);
 
   const switchNetwork = useCallback(async () => {
+    const eth = getEthereum();
     try {
-      await window.ethereum.request({ method: "wallet_switchEthereumChain", params: [{ chainId: CHAIN_HEX }] });
+      await eth.request({ method: "wallet_switchEthereumChain", params: [{ chainId: CHAIN_HEX }] });
     } catch (e) {
-      if (e?.code === 4902) {
-        await window.ethereum.request({
+      if (e?.code === 4902 || e?.data?.originalError?.code === 4902) {
+        await eth.request({
           method: "wallet_addEthereumChain",
           params: [{
             chainId: CHAIN_HEX,
@@ -183,7 +232,7 @@ export function useVault() {
   const send = useCallback(
     async (kind, amount, onSubmitted) => {
       if (!chainOk) await switchNetwork();
-      const provider = new BrowserProvider(window.ethereum);
+      const provider = new BrowserProvider(getEthereum());
       const signer = await provider.getSigner();
       const vault = new Contract(deployment.address, VAULT_ABI, signer);
       const value = parseEther(amount);

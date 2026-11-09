@@ -1,4 +1,4 @@
-// Outline icon set (24px grid, 1.75 stroke), rendered at 16–20px.
+// Outline icon set (24px grid, 1.75 stroke), rendered at 16-20px.
 const paths = {
   overview: <><rect x="3" y="3" width="7" height="9" rx="1.5" /><rect x="14" y="3" width="7" height="5" rx="1.5" /><rect x="14" y="12" width="7" height="9" rx="1.5" /><rect x="3" y="16" width="7" height="5" rx="1.5" /></>,
   transfer: <><path d="M7 4v16M7 20l-3-3M7 20l3-3" /><path d="M17 20V4M17 4l-3 3M17 4l3 3" /></>,
@@ -29,6 +29,7 @@ const paths = {
   inbox: <><path d="M22 12h-6l-2 3h-4l-2-3H2" /><path d="M5.5 5h13L22 12v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-6z" /></>,
   link: <><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7" /><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7" /></>,
   sidebar: <><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M9 3v18" /></>,
+  eth: <><path d="M12 2L5 12l7 4 7-4-7-10z" /><path d="M5 14l7 8 7-8-7 4-7-4z" /></>,
 };
 
 export default function Icon({ name, size = 18, className = "", ...rest }) {
